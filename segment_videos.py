@@ -50,7 +50,8 @@ def generate_titles_file(input_dir: Path, output_file: str = "video_titles.json"
         video_data.append({
             "filename": video.name,
             "base_name": "",
-            "directory_name": ""
+            "directory_name": "",
+            "skip": ""
         })
 
     output_path = Path.cwd() / output_file
@@ -59,7 +60,7 @@ def generate_titles_file(input_dir: Path, output_file: str = "video_titles.json"
 
     print(f"\n✓ Generated titles file: {output_path}")
     print(f"  Found {len(video_files)} video file(s)")
-    print(f"\nPlease edit {output_file} to fill in 'base_name' and 'directory_name' fields.")
+    print(f"\nPlease edit {output_file} to fill in 'base_name' and optionally 'directory_name' and 'skip' fields.")
 
 
 class VideoTitles:
@@ -112,7 +113,11 @@ def format_time(minutes: int) -> str:
 def split_video(video_path: Path,
                 output_dir: Path,
                 base_name: str,
-                segment_length: int) -> bool:
+                segment_length: int,
+                compress: bool = False,
+                codec: str = 'libx264',
+                crf: int = 30,
+                skip: str = '') -> bool:
     """Split a video into segments using ffmpeg."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -121,20 +126,38 @@ def split_video(video_path: Path,
 
     segment_time = format_time(segment_length)
 
-    cmd = [
-        'ffmpeg',
-        '-i', str(video_path),
-        '-c', 'copy',
+    # Build ffmpeg command
+    cmd = ['ffmpeg']
+
+    # Add -ss before -i for fast input seeking (if skip is specified)
+    if skip:
+        cmd.extend(['-ss', skip])
+
+    cmd.extend(['-i', str(video_path)])
+
+    # Add codec settings
+    if compress:
+        cmd.extend(['-c:v', codec, '-crf', str(crf), '-c:a', 'copy'])
+    else:
+        cmd.extend(['-c', 'copy'])
+
+    cmd.extend([
         '-map', '0',
         '-segment_time', segment_time,
         '-f', 'segment',
         '-reset_timestamps', '1',
         str(output_pattern)
-    ]
+    ])
 
     print(f"\nSplitting: {video_path.name}")
     print(f"  Output: {output_dir}/")
     print(f"  Segment length: {segment_length} minutes")
+    if skip:
+        print(f"  Skip: {skip}")
+    if compress:
+        print(f"  Compression: {codec} (CRF {crf})")
+    else:
+        print(f"  Compression: Disabled (copy)")
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True)
@@ -155,7 +178,10 @@ def split_videos(input_dir: Path,
                 completed_dir: Path,
                 titles_file: str,
                 folder_per_split: bool,
-                segment_length: int) -> None:
+                segment_length: int,
+                compress: bool = False,
+                codec: str = 'libx264',
+                crf: int = 30) -> None:
     """Split videos based on titles file configuration."""
     titles_path = Path.cwd() / titles_file
 
@@ -184,6 +210,7 @@ def split_videos(input_dir: Path,
         filename = video_info['filename']
         base_name = video_info.get('base_name', '')
         directory_name = video_info.get('directory_name', '')
+        skip = video_info.get('skip', '')
 
         video_path = input_dir / filename
 
@@ -208,7 +235,8 @@ def split_videos(input_dir: Path,
             output_dir = split_dir
 
         # Split the video
-        success = split_video(video_path, output_dir, base_name, segment_length)
+        success = split_video(video_path, output_dir, base_name, segment_length,
+                             compress, codec, crf, skip)
 
         if success:
             # Move to completed directory
@@ -253,6 +281,10 @@ def interactive_menu(args: argparse.Namespace) -> None:
         print(f"Completed directory: {completed_dir}")
         print(f"Segment length: {args.segment_length} minutes")
         print(f"Folder per split: {args.folder_per_split}")
+        if args.compress:
+            print(f"Compression: {args.codec} (CRF {args.crf})")
+        else:
+            print(f"Compression: Disabled")
         print("="*60)
         print("\nOptions:")
         print("  1. Generate titles file")
@@ -271,7 +303,10 @@ def interactive_menu(args: argparse.Namespace) -> None:
                 completed_dir,
                 args.titles_file,
                 args.folder_per_split,
-                args.segment_length
+                args.segment_length,
+                args.compress,
+                args.codec,
+                args.crf
             )
         elif choice == '3':
             print("\nExiting...")
@@ -321,6 +356,23 @@ def main():
         '-t', '--titles-file',
         default='video_titles.json',
         help='Name of the titles JSON file (default: video_titles.json)'
+    )
+    parser.add_argument(
+        '-C', '--compress',
+        action='store_true',
+        help='Enable video compression (default: disabled, uses copy)'
+    )
+    parser.add_argument(
+        '--codec',
+        choices=['libx264', 'libx265'],
+        default='libx264',
+        help='Video codec for compression (default: libx264)'
+    )
+    parser.add_argument(
+        '--crf',
+        type=int,
+        default=30,
+        help='CRF quality level for compression, lower is better quality (default: 30)'
     )
 
     args = parser.parse_args()
