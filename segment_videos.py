@@ -116,11 +116,8 @@ def split_video(video_path: Path,
     """Split a video into segments using ffmpeg."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Prepare output pattern
-    if base_name:
-        output_pattern = output_dir / f"{base_name}_%03d{video_path.suffix}"
-    else:
-        output_pattern = output_dir / f"{video_path.stem}_%03d{video_path.suffix}"
+    # Prepare output pattern (always output as .mp4)
+    output_pattern = output_dir / f"{base_name}_%03d.mp4"
 
     segment_time = format_time(segment_length)
 
@@ -195,14 +192,18 @@ def split_videos(input_dir: Path,
             failed += 1
             continue
 
+        # Ensure base_name is provided
+        if not base_name:
+            print(f"\n✗ Error: 'base_name' is empty for {filename}")
+            print(f"Please edit the titles file and fill in the 'base_name' field for all videos.")
+            sys.exit(1)
+
         # Determine output directory
         if folder_per_split:
             if directory_name:
                 output_dir = split_dir / directory_name
-            elif base_name:
-                output_dir = split_dir / base_name
             else:
-                output_dir = split_dir / video_path.stem
+                output_dir = split_dir / base_name
         else:
             output_dir = split_dir
 
