@@ -25,16 +25,16 @@ Simple tool for splitting groups of large video files into smaller segments usin
 -f, --folder-per-split  Create a separate folder for each split video
 -l, --segment-length    Segment length in minutes (default: 15)
 -t, --titles-file       Name of the titles JSON file (default: video_titles.json)
--C, --compress          Enable video compression (default: disabled)
+--no-compress           Disable compression and use stream copy instead (faster but may be incompatible)
 --codec                 Video codec: libx264 or libx265 (default: libx264)
---crf                   CRF quality level, lower is better (default: 30)
+--crf                   CRF quality level, lower is better (default: 28)
 ```
 
 ## Examples
 
-### Basic Usage (No Compression)
+### Basic Usage (Default Compression)
 
-Split videos into 15-minute segments without compression (fast, lossless):
+Split videos into 15-minute segments with H.264 re-encoding (default CRF 28):
 
 ```bash
 ./segment_videos.py
@@ -58,28 +58,20 @@ Create a separate folder for each video's segments:
 
 ### Compression Examples
 
-#### Light Compression (H.264, Default Quality)
-
-Use H.264 codec with CRF 30 (moderate compression, good quality):
-
-```bash
-./segment_videos.py -C
-```
-
-#### High Quality Compression (H.264)
+#### High Quality (H.264)
 
 Use H.264 with CRF 18 (minimal compression, near-lossless quality):
 
 ```bash
-./segment_videos.py -C --crf 18
+./segment_videos.py --crf 18
 ```
 
-#### Moderate Compression (H.264)
+#### Balanced Quality (H.264)
 
 Use H.264 with CRF 23 (balanced compression and quality):
 
 ```bash
-./segment_videos.py -C --crf 23
+./segment_videos.py --crf 23
 ```
 
 #### Heavy Compression (H.264)
@@ -87,51 +79,43 @@ Use H.264 with CRF 23 (balanced compression and quality):
 Use H.264 with CRF 35 (high compression, lower quality):
 
 ```bash
-./segment_videos.py -C --crf 35
+./segment_videos.py --crf 35
 ```
 
 #### H.265 Compression (Better Efficiency)
 
-Use H.265 codec with default CRF 30 (better compression than H.264 at same quality):
+Use H.265 codec with default CRF 28. Note: H.265 may not be compatible with all players.
 
 ```bash
-./segment_videos.py -C --codec libx265
+./segment_videos.py --codec libx265
 ```
 
-#### H.265 High Quality
+### Stream Copy (No Re-encoding)
 
-Use H.265 with CRF 20 (excellent quality, smaller than H.264):
-
-```bash
-./segment_videos.py -C --codec libx265 --crf 20
-```
-
-#### H.265 Maximum Compression
-
-Use H.265 with CRF 35 (maximum compression, acceptable quality):
+Skip re-encoding for speed. Only use this if the source is already in a compatible format:
 
 ```bash
-./segment_videos.py -C --codec libx265 --crf 35
+./segment_videos.py --no-compress
 ```
 
 ### Complete Examples
 
-Split videos into 30-minute segments with H.264 compression, organized in folders:
+Split videos into 30-minute segments, organized in folders:
 
 ```bash
-./segment_videos.py -i ~/videos -l 30 -f -C --crf 23
+./segment_videos.py -i ~/videos -l 30 -f --crf 23
 ```
 
-Process videos from custom directory with H.265 compression, high quality:
+Process videos from a custom directory with high quality:
 
 ```bash
-./segment_videos.py -i /path/to/videos -s /path/to/output -C --codec libx265 --crf 20
+./segment_videos.py -i /path/to/videos -s /path/to/output --crf 20
 ```
 
-Split into 10-minute segments with heavy H.264 compression to save space:
+Split into 10-minute segments with heavy compression to save space:
 
 ```bash
-./segment_videos.py -l 10 -C --crf 32
+./segment_videos.py -l 10 --crf 32
 ```
 
 ### Skipping Video Start
@@ -177,7 +161,7 @@ CRF (Constant Rate Factor) controls video quality and file size. Lower values = 
 - **31-34**: Acceptable quality, smaller files
 - **35+**: Lower quality, maximum compression
 
-**Note:** H.265 provides better compression than H.264 at the same CRF value, but encoding is slower.
+**Note:** H.265 provides better compression than H.264 at the same CRF value, but encoding is slower and may not be compatible with all players.
 
 ## JSON Metadata Format
 

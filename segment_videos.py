@@ -12,17 +12,25 @@ import sys
 from pathlib import Path
 from typing import List
 
-
 # Common video file extensions
-VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpg', '.mpeg'}
+VIDEO_EXTENSIONS = {
+    ".mp4",
+    ".avi",
+    ".mkv",
+    ".mov",
+    ".wmv",
+    ".flv",
+    ".webm",
+    ".m4v",
+    ".mpg",
+    ".mpeg",
+}
 
 
 def check_ffmpeg() -> bool:
     """Check if ffmpeg is installed and available."""
     try:
-        subprocess.run(['ffmpeg', '-version'],
-                      capture_output=True,
-                      check=True)
+        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
         return True
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False
@@ -37,7 +45,9 @@ def find_video_files(input_dir: Path) -> List[Path]:
     return sorted(video_files)
 
 
-def generate_titles_file(input_dir: Path, output_file: str = "video_titles.json") -> None:
+def generate_titles_file(
+    input_dir: Path, output_file: str = "video_titles.json"
+) -> None:
     """Generate a JSON file with video metadata."""
     video_files = find_video_files(input_dir)
 
@@ -47,20 +57,19 @@ def generate_titles_file(input_dir: Path, output_file: str = "video_titles.json"
 
     video_data = []
     for video in video_files:
-        video_data.append({
-            "filename": video.name,
-            "base_name": "",
-            "directory_name": "",
-            "skip": ""
-        })
+        video_data.append(
+            {"filename": video.name, "base_name": "", "directory_name": "", "skip": ""}
+        )
 
     output_path = Path.cwd() / output_file
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         json.dump(video_data, f, indent=2)
 
     print(f"\n✓ Generated titles file: {output_path}")
     print(f"  Found {len(video_files)} video file(s)")
-    print(f"\nPlease edit {output_file} to fill in 'base_name' and optionally 'directory_name' and 'skip' fields.")
+    print(
+        f"\nPlease edit {output_file} to fill in 'base_name' and optionally 'directory_name' and 'skip' fields."
+    )
 
 
 class VideoTitles:
@@ -75,11 +84,11 @@ class VideoTitles:
             raise FileNotFoundError(f"Titles file not found: {self.titles_path}")
 
         # Load the JSON file
-        with open(self.titles_path, 'r') as f:
+        with open(self.titles_path, "r") as f:
             self.video_data = json.load(f)
 
         # Create backup file
-        backup_path = self.titles_path.with_suffix('.json.bak')
+        backup_path = self.titles_path.with_suffix(".json.bak")
         shutil.copy2(self.titles_path, backup_path)
         print(f"Created backup: {backup_path}")
 
@@ -90,7 +99,7 @@ class VideoTitles:
     def delete_entry(self, filename: str) -> bool:
         """Delete an entry by filename and auto-save the file."""
         original_length = len(self.video_data)
-        self.video_data = [v for v in self.video_data if v.get('filename') != filename]
+        self.video_data = [v for v in self.video_data if v.get("filename") != filename]
 
         if len(self.video_data) < original_length:
             self._save()
@@ -99,7 +108,7 @@ class VideoTitles:
 
     def _save(self) -> None:
         """Save the current video data to the JSON file."""
-        with open(self.titles_path, 'w') as f:
+        with open(self.titles_path, "w") as f:
             json.dump(self.video_data, f, indent=2)
 
 
@@ -110,14 +119,16 @@ def format_time(minutes: int) -> str:
     return f"{hours:02d}:{mins:02d}:00"
 
 
-def split_video(video_path: Path,
-                output_dir: Path,
-                base_name: str,
-                segment_length: int,
-                compress: bool = False,
-                codec: str = 'libx264',
-                crf: int = 30,
-                skip: str = '') -> bool:
+def split_video(
+    video_path: Path,
+    output_dir: Path,
+    base_name: str,
+    segment_length: int,
+    compress: bool = True,
+    codec: str = "libx264",
+    crf: int = 28,
+    skip: str = "",
+) -> bool:
     """Split a video into segments using ffmpeg."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -127,27 +138,55 @@ def split_video(video_path: Path,
     segment_time = format_time(segment_length)
 
     # Build ffmpeg command
-    cmd = ['ffmpeg']
+    cmd = ["ffmpeg"]
 
     # Add -ss before -i for fast input seeking (if skip is specified)
     if skip:
-        cmd.extend(['-ss', skip])
+        cmd.extend(["-ss", skip])
 
-    cmd.extend(['-i', str(video_path)])
+    cmd.extend(["-i", str(video_path)])
 
     # Add codec settings
     if compress:
-        cmd.extend(['-c:v', codec, '-crf', str(crf), '-c:a', 'copy'])
+        # Re-encode to H.264 Main profile + AAC for broad compatibility
+        cmd.extend(
+            [
+                "-c:v",
+                codec,
+                "-profile:v",
+                "main",
+                "-level",
+                "4.0",
+                "-pix_fmt",
+                "yuv420p",
+                "-crf",
+                str(crf),
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
+                "-ar",
+                "44100",
+                "-ac",
+                "2",
+            ]
+        )
     else:
-        cmd.extend(['-c', 'copy'])
+        cmd.extend(["-c", "copy"])
 
-    cmd.extend([
-        '-map', '0',
-        '-segment_time', segment_time,
-        '-f', 'segment',
-        '-reset_timestamps', '1',
-        str(output_pattern)
-    ])
+    cmd.extend(
+        [
+            "-map",
+            "0",
+            "-segment_time",
+            segment_time,
+            "-f",
+            "segment",
+            "-reset_timestamps",
+            "1",
+            str(output_pattern),
+        ]
+    )
 
     print(f"\nSplitting: {video_path.name}")
     print(f"  Output: {output_dir}/")
@@ -173,15 +212,17 @@ def split_video(video_path: Path,
         return False
 
 
-def split_videos(input_dir: Path,
-                split_dir: Path,
-                completed_dir: Path,
-                titles_file: str,
-                folder_per_split: bool,
-                segment_length: int,
-                compress: bool = False,
-                codec: str = 'libx264',
-                crf: int = 30) -> None:
+def split_videos(
+    input_dir: Path,
+    split_dir: Path,
+    completed_dir: Path,
+    titles_file: str,
+    folder_per_split: bool,
+    segment_length: int,
+    compress: bool = True,
+    codec: str = "libx264",
+    crf: int = 28,
+) -> None:
     """Split videos based on titles file configuration."""
     titles_path = Path.cwd() / titles_file
 
@@ -207,10 +248,10 @@ def split_videos(input_dir: Path,
     failed = 0
 
     for video_info in video_data:
-        filename = video_info['filename']
-        base_name = video_info.get('base_name', '')
-        directory_name = video_info.get('directory_name', '')
-        skip = video_info.get('skip', '')
+        filename = video_info["filename"]
+        base_name = video_info.get("base_name", "")
+        directory_name = video_info.get("directory_name", "")
+        skip = video_info.get("skip", "")
 
         video_path = input_dir / filename
 
@@ -222,7 +263,9 @@ def split_videos(input_dir: Path,
         # Ensure base_name is provided
         if not base_name:
             print(f"\n✗ Error: 'base_name' is empty for {filename}")
-            print(f"Please edit the titles file and fill in the 'base_name' field for all videos.")
+            print(
+                f"Please edit the titles file and fill in the 'base_name' field for all videos."
+            )
             sys.exit(1)
 
         # Determine output directory
@@ -235,8 +278,16 @@ def split_videos(input_dir: Path,
             output_dir = split_dir
 
         # Split the video
-        success = split_video(video_path, output_dir, base_name, segment_length,
-                             compress, codec, crf, skip)
+        success = split_video(
+            video_path,
+            output_dir,
+            base_name,
+            segment_length,
+            compress,
+            codec,
+            crf,
+            skip,
+        )
 
         if success:
             # Move to completed directory
@@ -273,9 +324,9 @@ def interactive_menu(args: argparse.Namespace) -> None:
     completed_dir = Path(args.completed_dir).resolve()
 
     while True:
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("Video Segmenter")
-        print("="*60)
+        print("=" * 60)
         print(f"Input directory: {input_dir}")
         print(f"Split directory: {split_dir}")
         print(f"Completed directory: {completed_dir}")
@@ -284,8 +335,8 @@ def interactive_menu(args: argparse.Namespace) -> None:
         if args.compress:
             print(f"Compression: {args.codec} (CRF {args.crf})")
         else:
-            print(f"Compression: Disabled")
-        print("="*60)
+            print(f"Compression: Disabled (copy)")
+        print("=" * 60)
         print("\nOptions:")
         print("  1. Generate titles file")
         print("  2. Split videos into segments")
@@ -294,9 +345,9 @@ def interactive_menu(args: argparse.Namespace) -> None:
 
         choice = input("Select an option (1-3): ").strip()
 
-        if choice == '1':
+        if choice == "1":
             generate_titles_file(input_dir)
-        elif choice == '2':
+        elif choice == "2":
             split_videos(
                 input_dir,
                 split_dir,
@@ -306,9 +357,9 @@ def interactive_menu(args: argparse.Namespace) -> None:
                 args.segment_length,
                 args.compress,
                 args.codec,
-                args.crf
+                args.crf,
             )
-        elif choice == '3':
+        elif choice == "3":
             print("\nExiting...")
             break
         else:
@@ -327,52 +378,60 @@ def main():
         description="Interactive video segmentation tool using ffmpeg"
     )
     parser.add_argument(
-        '-i', '--input-dir',
-        default='.',
-        help='Input directory containing video files (default: current directory)'
+        "-i",
+        "--input-dir",
+        default=".",
+        help="Input directory containing video files (default: current directory)",
     )
     parser.add_argument(
-        '-s', '--split-dir',
-        default='split',
-        help='Output directory for split videos (default: ./split)'
+        "-s",
+        "--split-dir",
+        default="split",
+        help="Output directory for split videos (default: ./split)",
     )
     parser.add_argument(
-        '-c', '--completed-dir',
-        default='completed',
-        help='Directory to move completed videos (default: ./completed)'
+        "-c",
+        "--completed-dir",
+        default="completed",
+        help="Directory to move completed videos (default: ./completed)",
     )
     parser.add_argument(
-        '-f', '--folder-per-split',
-        action='store_true',
-        help='Create a separate folder for each split video'
+        "-f",
+        "--folder-per-split",
+        action="store_true",
+        help="Create a separate folder for each split video",
     )
     parser.add_argument(
-        '-l', '--segment-length',
+        "-l",
+        "--segment-length",
         type=int,
         default=15,
-        help='Segment length in minutes (default: 15)'
+        help="Segment length in minutes (default: 15)",
     )
     parser.add_argument(
-        '-t', '--titles-file',
-        default='video_titles.json',
-        help='Name of the titles JSON file (default: video_titles.json)'
+        "-t",
+        "--titles-file",
+        default="video_titles.json",
+        help="Name of the titles JSON file (default: video_titles.json)",
     )
     parser.add_argument(
-        '-C', '--compress',
-        action='store_true',
-        help='Enable video compression (default: disabled, uses copy)'
+        "--no-compress",
+        dest="compress",
+        action="store_false",
+        help="Disable compression and use stream copy instead (faster but may cause incompatibility issues with weaker/inferior video players)",
+    )
+    parser.set_defaults(compress=True)
+    parser.add_argument(
+        "--codec",
+        choices=["libx264", "libx265"],
+        default="libx264",
+        help="Video codec for compression (default: libx264)",
     )
     parser.add_argument(
-        '--codec',
-        choices=['libx264', 'libx265'],
-        default='libx264',
-        help='Video codec for compression (default: libx264)'
-    )
-    parser.add_argument(
-        '--crf',
+        "--crf",
         type=int,
-        default=30,
-        help='CRF quality level for compression, lower is better quality (default: 30)'
+        default=28,
+        help="CRF quality level for compression, lower is better quality (default: 28)",
     )
 
     args = parser.parse_args()
@@ -386,5 +445,5 @@ def main():
     interactive_menu(args)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
