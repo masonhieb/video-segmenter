@@ -6,9 +6,13 @@ Generates a titles file for video metadata and splits videos into segments.
 
 import argparse
 import json
+import math
 import shutil
 import subprocess
 import sys
+import time
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List
 
@@ -150,6 +154,54 @@ def format_time(minutes: int) -> str:
     return f"{hours:02d}:{mins:02d}:00"
 
 
+@dataclass
+class Progress:
+    total_segments: int
+    completed: int = 0
+    segment_times: List[float] = field(default_factory=list)
+
+
+def get_video_duration(video_path: Path) -> float:
+    """Return video duration in seconds using ffprobe, or 0.0 on failure."""
+    cmd = [
+        "ffprobe",
+        "-v",
+        "quiet",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        str(video_path),
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        return float(result.stdout.strip())
+    except (subprocess.CalledProcessError, ValueError, FileNotFoundError):
+        return 0.0
+
+
+def _print_progress(progress: Progress) -> None:
+    """Print a single progress line showing completion percentage and ETA."""
+    completed = progress.completed
+    total = progress.total_segments
+    times = progress.segment_times
+
+    percent = min(100, round(completed / total * 100)) if total > 0 else 0
+
+    if times:
+        avg_time = sum(times) / len(times)
+        remaining = max(0, total - completed)
+        eta_dt = datetime.now() + timedelta(seconds=remaining * avg_time)
+        if eta_dt.second >= 30:
+            eta_dt = eta_dt.replace(second=0, microsecond=0) + timedelta(minutes=1)
+        else:
+            eta_dt = eta_dt.replace(second=0, microsecond=0)
+        eta_str = eta_dt.strftime("%Y-%m-%d %-I:%M %p")
+        print(f"  {percent}% complete, ETA {eta_str}")
+    else:
+        print(f"  {percent}% complete")
+
+
 def split_video(
     video_path: Path,
     output_dir: Path,
@@ -159,6 +211,7 @@ def split_video(
     codec: str = "libx264",
     crf: int = 30,
     skip: str = "",
+    progress: Progress = None,
 ) -> bool:
     """Split a video into segments using ffmpeg."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -230,13 +283,37 @@ def split_video(
         print(f"  Compression: Disabled (copy)")
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode == 0:
+        process = subprocess.Popen(cmd, stderr=subprocess.PIPE, text=True)
+
+        stderr_lines = []
+        segment_open_times = []
+
+        for line in process.stderr:
+            stderr_lines.append(line)
+            if progress is not None and "Opening '" in line and "for writing" in line:
+                now = time.time()
+                segment_open_times.append(now)
+                if len(segment_open_times) > 1:
+                    # The previous segment just finished
+                    duration = now - segment_open_times[-2]
+                    progress.segment_times.append(duration)
+                    progress.completed += 1
+                    _print_progress(progress)
+
+        process.wait()
+
+        if process.returncode == 0:
+            if progress is not None and segment_open_times:
+                # The last segment just finished
+                duration = time.time() - segment_open_times[-1]
+                progress["segment_times"].append(duration)
+                progress["completed"] += 1
+                _print_progress(progress)
             print(f"✓ Successfully split {video_path.name}")
             return True
         else:
             print(f"✗ Error splitting {video_path.name}")
-            print(f"  Error: {result.stderr}")
+            print(f"  Error: {''.join(stderr_lines[-20:])}")
             return False
     except Exception as e:
         print(f"✗ Exception while splitting {video_path.name}: {e}")
@@ -274,6 +351,26 @@ def split_videos(
     # Create directories
     split_dir.mkdir(parents=True, exist_ok=True)
     completed_dir.mkdir(parents=True, exist_ok=True)
+
+    # Estimate total segments across all videos for progress tracking
+    existing_paths = [
+        input_dir / v["filename"]
+        for v in video_data
+        if (input_dir / v["filename"]).exists()
+    ]
+    total_duration = sum(get_video_duration(p) for p in existing_paths)
+    total_segments = (
+        max(1, math.ceil(total_duration / (segment_length * 60)))
+        if total_duration > 0
+        else None
+    )
+    progress = (
+        Progress(total_segments=total_segments) if total_segments is not None else None
+    )
+    if total_segments is not None:
+        print(
+            f"\nEstimated segments: ~{total_segments} ({segment_length}-minute segments)"
+        )
 
     processed = 0
     failed = 0
@@ -318,6 +415,7 @@ def split_videos(
             codec,
             crf,
             skip,
+            progress,
         )
 
         if success:
