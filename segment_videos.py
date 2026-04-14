@@ -55,13 +55,44 @@ def generate_titles_file(
         print(f"No video files found in {input_dir}")
         return
 
+    output_path = Path.cwd() / output_file
+    backup_path = output_path.with_suffix(".json.bak")
+
+    # Build fresh entries for all found videos
     video_data = []
     for video in video_files:
         video_data.append(
             {"filename": video.name, "base_name": "", "directory_name": "", "skip": ""}
         )
 
-    output_path = Path.cwd() / output_file
+    # If a backup exists, offer to merge previously entered metadata
+    if backup_path.exists():
+        answer = (
+            input(
+                f"Backup file found ({backup_path.name}). Copy metadata for matching filenames? (y/n): "
+            )
+            .strip()
+            .lower()
+        )
+        if answer == "y":
+            with open(backup_path, "r") as f:
+                backup_data = json.load(f)
+            backup_by_filename = {entry["filename"]: entry for entry in backup_data}
+            merged = 0
+            for entry in video_data:
+                if entry["filename"] in backup_by_filename:
+                    bak_entry = backup_by_filename[entry["filename"]]
+                    entry["base_name"] = bak_entry.get("base_name", "")
+                    entry["directory_name"] = bak_entry.get("directory_name", "")
+                    entry["skip"] = bak_entry.get("skip", "")
+                    merged += 1
+            print(f"  Merged metadata for {merged} matching file(s)")
+
+    # Back up the current titles file before overwriting
+    if output_path.exists():
+        shutil.copy2(output_path, backup_path)
+        print(f"  Backed up existing titles file to {backup_path.name}")
+
     with open(output_path, "w") as f:
         json.dump(video_data, f, indent=2)
 
