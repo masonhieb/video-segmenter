@@ -306,8 +306,8 @@ def split_video(
             if progress is not None and segment_open_times:
                 # The last segment just finished
                 duration = time.time() - segment_open_times[-1]
-                progress["segment_times"].append(duration)
-                progress["completed"] += 1
+                progress.segment_times.append(duration)
+                progress.completed += 1
                 _print_progress(progress)
             print(f"✓ Successfully split {video_path.name}")
             return True
