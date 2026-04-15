@@ -189,9 +189,9 @@ def _print_progress(progress: Progress) -> None:
     percent = min(100, round(completed / total * 100)) if total > 0 else 0
 
     if times:
-        avg_time = sum(times) / len(times)
+        median_time = sorted(times)[len(times) // 2]
         remaining = max(0, total - completed)
-        eta_dt = datetime.now() + timedelta(seconds=remaining * avg_time)
+        eta_dt = datetime.now() + timedelta(seconds=remaining * median_time)
         if eta_dt.second >= 30:
             eta_dt = eta_dt.replace(second=0, microsecond=0) + timedelta(minutes=1)
         else:
