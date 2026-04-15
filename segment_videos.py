@@ -209,7 +209,7 @@ def split_video(
     segment_length: int,
     compress: bool = True,
     codec: str = "libx264",
-    crf: int = 30,
+    crf: int = 38,
     skip: str = "",
     progress: Progress = None,
 ) -> bool:
@@ -329,7 +329,7 @@ def split_videos(
     segment_length: int,
     compress: bool = True,
     codec: str = "libx264",
-    crf: int = 30,
+    crf: int = 38,
 ) -> None:
     """Split videos based on titles file configuration."""
     titles_path = Path.cwd() / titles_file
@@ -559,8 +559,8 @@ def main():
     parser.add_argument(
         "--crf",
         type=int,
-        default=30,
-        help="CRF quality level for compression, lower is better quality (default: 30)",
+        default=38,
+        help="CRF quality level for compression, lower is better quality (default: 38)",
     )
 
     args = parser.parse_args()

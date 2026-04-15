@@ -27,7 +27,7 @@ Simple tool for splitting groups of large video files into smaller segments usin
 -t, --titles-file       Name of the titles JSON file (default: video_titles.json)
 --no-compress           Disable compression and use stream copy instead (faster but may be incompatible)
 --codec                 Video codec: libx264 or libx265 (default: libx264)
---crf                   CRF quality level, lower is better (default: 30)
+--crf                   CRF quality level, lower is better (default: 38)
 ```
 
 ## Examples
